@@ -1,9 +1,6 @@
 
 plugin:Activate(false)
 
-local CollectionService = game:GetService('CollectionService')
-local UserInputService = game:GetService('UserInputService')
-
 local pluginMouse = plugin:GetMouse()
 
 local pluginModules = require(script.Parent.Modules)

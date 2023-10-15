@@ -11,17 +11,19 @@ Module.Keybinds = {
 
 		INCREASE_WALL_HEIGHT = Enum.KeyCode.Five,
 		DECREASE_WALL_HEIGHT = Enum.KeyCode.Six,
+		INCREASE_GRID_SIZE = Enum.KeyCode.Seven,
+		DECREASE_GRID_SIZE = Enum.KeyCode.Eight,
 	},
 
 }
 
 -- save to studio files
-function Module:ToString()
-
+function Module:KeybindsToString()
+	return '{}'
 end
 
 -- load from studio files
-function Module:FromString()
+function Module:KeybindsFromString( keybindsString )
 
 end
 
