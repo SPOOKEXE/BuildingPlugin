@@ -1,0 +1,13 @@
+{
+	"name": "building-plugin",
+	"tree": {
+		"$className": "DataModel",
+		"ServerStorage": {
+			"$className": "ServerStorage",
+			"$ignoreUnknownInstances": true,
+			"BuildingPlugin" : {
+				"$path": "plugin"
+			}
+		}
+	}
+}
