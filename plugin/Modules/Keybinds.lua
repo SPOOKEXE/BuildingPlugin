@@ -9,10 +9,14 @@ Module.Keybinds = {
 		COMPLETE_CONCURRENT_WALL = Enum.KeyCode.Three,
 		CLEAR_CONCURRENT_WALL = Enum.KeyCode.Four,
 
-		INCREASE_WALL_HEIGHT = Enum.KeyCode.Five,
-		DECREASE_WALL_HEIGHT = Enum.KeyCode.Six,
-		INCREASE_GRID_SIZE = Enum.KeyCode.Seven,
-		DECREASE_GRID_SIZE = Enum.KeyCode.Eight,
+		INCREASE_WALL_HEIGHT = Enum.KeyCode.Y,
+		DECREASE_WALL_HEIGHT = Enum.KeyCode.U,
+		INCREASE_GRID_SIZE = Enum.KeyCode.I,
+		DECREASE_GRID_SIZE = Enum.KeyCode.O,
+
+		TOGGLE_Y_HEIGHT = Enum.KeyCode.H,
+		INCREASE_Y_HEIGHT = Enum.KeyCode.J,
+		DECREASE_Y_HEIGHT = Enum.KeyCode.K,
 	},
 
 }

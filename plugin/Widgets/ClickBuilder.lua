@@ -17,8 +17,10 @@ local PluginMouse = nil :: PluginMouse
 local PluginToolbar = nil :: PluginToolbar
 
 local currentGridStud = 2
+local currentYLock = nil
 local concurrentWallHeight = 5
 local concurrentWallThickness = 1
+local currentHoverPosition = Vector3.zero
 
 local concurrentWallPoints = {}
 local concurrentFakeBalls = {}
@@ -46,6 +48,8 @@ gridTexture.Parent = gridLevelPart
 gridLevelPart.Parent = script
 
 local baseWallSegment = Instance.new('Part')
+baseWallSegment.TopSurface = Enum.SurfaceType.Smooth
+baseWallSegment.BottomSurface = Enum.SurfaceType.Smooth
 baseWallSegment.Transparency = 0.6
 baseWallSegment.Name = 'Segment'
 baseWallSegment.Size = Vector3.one
@@ -62,6 +66,8 @@ baseBallVertex.Transparency = 0.6
 baseBallVertex.Name = 'BallVertex'
 baseBallVertex.Size = Vector3.one
 baseBallVertex.Shape = Enum.PartType.Ball
+baseBallVertex.TopSurface = Enum.SurfaceType.Smooth
+baseBallVertex.BottomSurface = Enum.SurfaceType.Smooth
 baseBallVertex.Anchored = true
 baseBallVertex.CastShadow = true
 baseBallVertex.CanCollide = true
@@ -75,6 +81,8 @@ buildCylinderPost.Transparency = 0.6
 buildCylinderPost.Name = 'CylinderPost'
 buildCylinderPost.Size = Vector3.one
 buildCylinderPost.Shape = Enum.PartType.Cylinder
+buildCylinderPost.TopSurface = Enum.SurfaceType.Smooth
+buildCylinderPost.BottomSurface = Enum.SurfaceType.Smooth
 buildCylinderPost.Anchored = true
 buildCylinderPost.CastShadow = true
 buildCylinderPost.CanCollide = false
@@ -82,34 +90,72 @@ buildCylinderPost.CanTouch = false
 buildCylinderPost.CanQuery = false
 buildCylinderPost.Massless = true
 buildCylinderPost.Parent = script
+local buildWallPost = Instance.new('Part')
+buildWallPost.Transparency = 0.6
+buildWallPost.Name = 'WallSegment'
+buildWallPost.TopSurface = Enum.SurfaceType.Smooth
+buildWallPost.BottomSurface = Enum.SurfaceType.Smooth
+buildWallPost.Size = Vector3.one
+buildWallPost.Anchored = true
+buildWallPost.CastShadow = true
+buildWallPost.CanCollide = false
+buildWallPost.CanTouch = false
+buildWallPost.CanQuery = false
+buildWallPost.Massless = true
+buildWallPost.Parent = script
 
 local function SnapToGrid( Position, GridStep )
 	return Vector3.new(
-		math.round(Position.X * GridStep) / GridStep,
+		math.round(Position.X / GridStep) * GridStep,
 		Position.Y,
-		math.round(Position.Z * GridStep) / GridStep
+		math.round(Position.Z / GridStep) * GridStep
 	)
+end
+
+local function IsInputItemDown( inputItem : Enum.KeyCode | Enum.UserInputType )
+	local IsDown = false
+	pcall(function()
+		if UserInputService:IsKeyDown( inputItem ) then
+			IsDown = true
+		end
+	end)
+	pcall(function()
+		if UserInputService:IsMouseButtonPressed( inputItem ) then
+			IsDown = true
+		end
+	end)
+	return IsDown
 end
 
 -- // Module // --
 local Module = {}
 
 function Module.SetGridStud( gridStud )
-	currentGridStud = gridStud
+	currentGridStud = math.clamp(gridStud, 0.5, 12)
+	print('New Grid Size: ', currentGridStud)
 	gridTexture.StudsPerTileU = (6 * currentGridStud)
-	gridTexture.StudsPerTileV = gridTexture.StudsPerTileU
+	gridTexture.StudsPerTileV = (gridTexture.StudsPerTileU)
 end
 
 function Module.EnableGrid()
+	local Folder = workspace:FindFirstChild('ConcurrentWall')
 
-	PluginMouse.TargetFilter = gridLevelPart
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	raycastParams.IgnoreWater = true
+
 	gridLevelPart.Parent = workspace
 
 	gridMaid:Give(RunService.Heartbeat:Connect(function()
-		if PluginMouse and PluginMouse.Target then
-			gridLevelPart.Position = SnapToGrid(PluginMouse.Hit.Position, 6)
+		raycastParams.FilterDescendantsInstances = { buildCylinderPost, buildWallPost, gridLevelPart, Folder }
+		local raycastResult = pluginModules.ViewportRaycast.RaycastFromScreenPoint( PluginMouse.X, PluginMouse.Y, 300, raycastParams )
+		if raycastResult then
+			gridLevelPart.Position = SnapToGrid(raycastResult.Position, 32)
 		else
-			gridLevelPart.Position = SnapToGrid(CurrentCamera.CFrame.Position, 6)
+			gridLevelPart.Position = SnapToGrid(CurrentCamera.CFrame.Position, 32)
+		end
+		if currentYLock then
+			gridLevelPart.Position = Vector3.new( gridLevelPart.Position.X, currentYLock, gridLevelPart.Position.Z )
 		end
 	end))
 
@@ -122,7 +168,7 @@ end
 
 function Module.AdjustWallSegment( p0, p1, segment )
 	local Distance = (p0 - p1).Magnitude
-	segment.CFrame = CFrame.lookAt(p0, p1) * CFrame.new(0, 0, -Distance/2)
+	segment.CFrame = CFrame.lookAt(p0, p1) * CFrame.new( 0, concurrentWallHeight / 2, -Distance/2)
 	segment.Size = Vector3.new(concurrentWallThickness, concurrentWallHeight, Distance)
 end
 
@@ -136,7 +182,7 @@ function Module.ReconstructFakeConcurrentWall()
 	end
 
 	-- destroy extra unwanted walls
-	while #concurrentFakeWalls > #concurrentWallPoints - 1 do
+	while #concurrentFakeWalls > math.max(#concurrentWallPoints - 1, 0) do
 		local Item = table.remove(concurrentFakeWalls, #concurrentFakeWalls)
 		if Item then
 			Item:Destroy()
@@ -144,7 +190,7 @@ function Module.ReconstructFakeConcurrentWall()
 	end
 
 	-- destroy extra unwanted balls
-	while #concurrentFakeBalls > #concurrentWallPoints do
+	while #concurrentFakeBalls > math.max(#concurrentWallPoints, 0) do
 		local Item = table.remove(concurrentFakeBalls, #concurrentFakeBalls)
 		if Item then
 			Item:Destroy()
@@ -152,7 +198,7 @@ function Module.ReconstructFakeConcurrentWall()
 	end
 
 	-- create necessary walls
-	while #concurrentFakeWalls < #concurrentWallPoints - 1 do
+	while #concurrentFakeWalls < math.max(#concurrentWallPoints - 1, 0) do
 		local cloneSegment = baseWallSegment:Clone()
 		cloneSegment.Parent = concurrentParent
 		table.insert( concurrentFakeWalls, cloneSegment )
@@ -225,6 +271,9 @@ end
 
 function Module.Append3DVertexPoint( position )
 	position = SnapToGrid( position, currentGridStud )
+	if currentYLock then
+		position = Vector3.new( position.X, currentYLock, position.Z )
+	end
 	table.insert(concurrentWallPoints, position )
 	Module.ReconstructFakeConcurrentWall()
 	ChangeHistoryService:SetWaypoint('AppendVertexConcurrentWall')
@@ -246,17 +295,45 @@ function Module.EnableBuildMode()
 
 	Module.EnableGrid()
 
-	-- pluginMouse.Hit
-	-- pluginMouse.TargetSurface
-	-- pluginMouse.Target
-	-- pluginMouse.UnitRay
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	raycastParams.IgnoreWater = true
 
 	buildCylinderPost.Parent = workspace
 
 	buildMaid:Give(RunService.Heartbeat:Connect(function()
-		buildCylinderPost.Size = Vector3.new(1, concurrentWallHeight, 1 )
-		if PluginMouse and PluginMouse.Target then
-			buildCylinderPost.CFrame = CFrame.new( PluginMouse.Hit.Position )
+		buildCylinderPost.Size = Vector3.new(concurrentWallHeight, 1, 1 )
+
+		local Folder = workspace:FindFirstChild('ConcurrentWall')
+		raycastParams.FilterDescendantsInstances = { buildCylinderPost, buildWallPost, Folder }
+		if not currentYLock then
+			table.insert(raycastParams.FilterDescendantsInstances, gridLevelPart)
+		end
+
+		local raycastResult = nil
+		if PluginMouse and PluginMouse.Target and table.find( concurrentFakeBalls, PluginMouse.Target ) then
+			raycastResult = { Instance = PluginMouse.Target, Position = PluginMouse.Target.Position }
+		elseif PluginMouse and PluginMouse.Target and table.find( concurrentFakeWalls, PluginMouse.Target ) then
+			raycastResult = { Instance = PluginMouse.Target, Position = PluginMouse.Hit.Position }
+		else
+			raycastResult = pluginModules.ViewportRaycast.RaycastFromScreenPoint( PluginMouse.X, PluginMouse.Y, 300, raycastParams )
+		end
+
+		buildWallPost.Parent = (#concurrentWallPoints > 0 and raycastResult) and workspace or script
+		if not raycastResult then
+			return
+		end
+
+		local rayPositionGridLocked = SnapToGrid(raycastResult.Position, currentGridStud)
+		if currentYLock then
+			rayPositionGridLocked = Vector3.new(rayPositionGridLocked.X, currentYLock, rayPositionGridLocked.Z)
+		end
+
+		currentHoverPosition = rayPositionGridLocked
+
+		buildCylinderPost.CFrame = CFrame.new( rayPositionGridLocked ) * CFrame.Angles(0, 0, math.rad(90)) * CFrame.new( buildCylinderPost.Size.X / 2, 0, 0 )
+		if #concurrentWallPoints > 0 then
+			Module.AdjustWallSegment( concurrentWallPoints[#concurrentWallPoints], rayPositionGridLocked, buildWallPost )
 		end
 	end))
 
@@ -265,24 +342,24 @@ function Module.EnableBuildMode()
 			return
 		end
 
-		local function IsInputItemDown( inputItem : Enum.KeyCode | Enum.UserInputType )
-			local IsDown = false
-			pcall(function()
-				if UserInputService:IsKeyDown( inputItem ) then
-					IsDown = true
-				end
-			end)
-			pcall(function()
-				if UserInputService:IsMouseButtonPressed( inputItem ) then
-					IsDown = true
-				end
-			end)
-			return IsDown
-		end
+		local Folder = workspace:FindFirstChild('ConcurrentWall')
+		raycastParams.FilterDescendantsInstances = { buildCylinderPost, buildWallPost, gridLevelPart, Folder }
+		local raycastResult = pluginModules.ViewportRaycast.RaycastFromScreenPoint( PluginMouse.X, PluginMouse.Y, 300, raycastParams )
 
 		if IsInputItemDown(PluginKeybinds.CLICK_BUILDER.APPEND_VERTEX) then
-			print('Append Vertex: ', PluginMouse.Hit.Position)
-			Module.Append3DVertexPoint( PluginMouse.Hit.Position )
+			--[[
+				if raycastResult then
+					local GridLockedPosition = SnapToGrid(raycastResult.Position, currentGridStud)
+					print('Append Vertex: ', GridLockedPosition)
+					if currentYLock then
+						GridLockedPosition = Vector3.new( GridLockedPosition.X, currentYLock, GridLockedPosition.Z )
+					end
+					Module.Append3DVertexPoint( GridLockedPosition )
+				end
+			]]
+			if currentHoverPosition then
+				Module.Append3DVertexPoint( currentHoverPosition )
+			end
 		elseif IsInputItemDown(PluginKeybinds.CLICK_BUILDER.POP_VERTEX) then
 			print('Pop Vertex')
 			Module.Pop3DVertexPoint()
@@ -299,11 +376,23 @@ function Module.EnableBuildMode()
 			print('Clear Concurrent Wall')
 			Module.ClearConcurrentWall()
 		elseif IsInputItemDown(PluginKeybinds.CLICK_BUILDER.INCREASE_GRID_SIZE) then
-			print('Increase Grid Size by 0.5')
 			Module.SetGridStud( currentGridStud + 0.5 )
 		elseif IsInputItemDown(PluginKeybinds.CLICK_BUILDER.DECREASE_GRID_SIZE) then
-			print('Decrease Grid Size by 0.5')
 			Module.SetGridStud( currentGridStud - 0.5 )
+		elseif IsInputItemDown(PluginKeybinds.CLICK_BUILDER.TOGGLE_Y_HEIGHT) then
+			if currentYLock then
+				currentYLock = nil
+			else
+				currentYLock = raycastResult and math.floor(raycastResult.Position.Y) or 5
+			end
+		elseif IsInputItemDown(PluginKeybinds.CLICK_BUILDER.INCREASE_Y_HEIGHT) then
+			if currentYLock then
+				currentYLock += 0.5
+			end
+		elseif IsInputItemDown(PluginKeybinds.CLICK_BUILDER.DECREASE_Y_HEIGHT) then
+			if currentYLock then
+				currentYLock -= 0.5
+			end
 		end
 
 	end))
@@ -313,6 +402,7 @@ function Module.DisableBuildMode()
 	print('Disable Build Mode.')
 	Module.DisableGrid()
 	Module.ClearConcurrentWall()
+	buildWallPost.Parent = script
 	buildCylinderPost.Parent = script
 	local ConcurrentWallParent = workspace:FindFirstChild('ConcurrentWall')
 	if ConcurrentWallParent then
@@ -351,6 +441,8 @@ function Module.Init(otherSystems : table, mouse : PluginMouse, toolbar : Plugin
 		end
 	end))
 	widgetMaid:Give( clickBuilderButton )
+
+	Module.SetGridStud( 0.5 )
 
 end
 
