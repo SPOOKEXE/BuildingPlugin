@@ -230,6 +230,15 @@ function Module.ReconstructFakeConcurrentWall()
 		end
 		lastPoint = point
 	end
+
+	-- if the first and last point are in the same spot, align the walls to create a cyclic collection
+	if resizeAlignEnabled and concurrentWallPoints[1] == concurrentWallPoints[#concurrentWallPoints] and #concurrentWallPoints > 2 then
+		pluginModules.ResizeAlign(
+			{ Object = concurrentFakeWalls[#concurrentFakeWalls], Normal = Enum.NormalId.Front },
+			{ Object = concurrentFakeWalls[1], Normal = Enum.NormalId.Back }
+		)
+	end
+
 end
 
 function Module.CompleteConcurrentWall()
