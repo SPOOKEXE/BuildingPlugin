@@ -20,6 +20,7 @@ local currentGridStud = 2
 local currentYLock = nil
 local concurrentWallHeight = 5
 local concurrentWallThickness = 1
+local resizeAlignEnabled = true
 local currentHoverPosition = Vector3.zero
 
 local concurrentWallPoints = {}
@@ -212,13 +213,22 @@ function Module.ReconstructFakeConcurrentWall()
 	end
 
 	-- adjust walls
-	local last = nil
+	local lastPoint = nil
+	local lastWall = nil
 	for index, point in ipairs( concurrentWallPoints ) do
 		concurrentFakeBalls[index].Position = point
-		if last then
-			Module.AdjustWallSegment( last, point, concurrentFakeWalls[index-1] )
+		if lastPoint then
+			local currentWall = concurrentFakeWalls[index-1]
+			Module.AdjustWallSegment( lastPoint, point, currentWall )
+			if lastWall and resizeAlignEnabled then
+				pluginModules.ResizeAlign(
+					{ Object = lastWall, Normal = Enum.NormalId.Front },
+					{ Object = currentWall, Normal = Enum.NormalId.Back }
+				)
+			end
+			lastWall = currentWall
 		end
-		last = point
+		lastPoint = point
 	end
 end
 
@@ -347,16 +357,6 @@ function Module.EnableBuildMode()
 		local raycastResult = pluginModules.ViewportRaycast.RaycastFromScreenPoint( PluginMouse.X, PluginMouse.Y, 300, raycastParams )
 
 		if IsInputItemDown(PluginKeybinds.CLICK_BUILDER.APPEND_VERTEX) then
-			--[[
-				if raycastResult then
-					local GridLockedPosition = SnapToGrid(raycastResult.Position, currentGridStud)
-					print('Append Vertex: ', GridLockedPosition)
-					if currentYLock then
-						GridLockedPosition = Vector3.new( GridLockedPosition.X, currentYLock, GridLockedPosition.Z )
-					end
-					Module.Append3DVertexPoint( GridLockedPosition )
-				end
-			]]
 			if currentHoverPosition then
 				Module.Append3DVertexPoint( currentHoverPosition )
 			end
@@ -393,6 +393,9 @@ function Module.EnableBuildMode()
 			if currentYLock then
 				currentYLock -= 0.5
 			end
+		elseif IsInputItemDown( PluginKeybinds.CLICK_BUILDER.TOGGLE_RESIZE_ALIGN ) then
+			resizeAlignEnabled = not resizeAlignEnabled
+			print('Resize Alignment Enabled: ', resizeAlignEnabled)
 		end
 
 	end))
